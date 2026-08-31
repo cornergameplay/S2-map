@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>S2網格掃盆路徑工具</title>
+    <title>2S網格掃盆路徑工具</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
@@ -376,7 +376,7 @@
                 <li><b class="highlight">🌌 科技玻璃風格：</b>全新升級的深色半透明 UI，搭配原版明亮地圖圖資，提供頂級視覺與操作體驗。</li>
                 <li><b>🌍 地理判定：</b>自動抓取座標，判斷國家(中文)與城市(英文)，並計算與台北的時差。</li>
                 <li><b>🚶 步行切邊演算法：</b>管理員專屬功能，導航碰到 15m 範圍就前往下個點，公園自動直穿。</li>
-                <li><b>📝 雙向連動：</b>可直接修改第 4 區文字並更新回地圖，同步率 100%。</li>
+                <li><b>📝 雙向連動：</b>可直接修改第 4 區文字並更新回地圖，右鍵刪除圖層也會完美同步清空。</li>
             </ul>
             <button class="btn-draw" style="margin-top:10px;" onclick="closeModal()">了解</button>
         </div>
@@ -402,16 +402,13 @@
             const section3Content = document.getElementById('planningSectionContent');
             const fabContainer = document.getElementById('mapFabsContainer');
 
-            // 移除動畫class，方便重複觸發
             box.classList.remove('shake-anim');
 
             if (pwd === 'adminccfh') {
-                // 管理員權限
                 document.getElementById('loginOverlay').style.opacity = '0';
                 setTimeout(() => { document.getElementById('loginOverlay').style.visibility = 'hidden'; }, 500);
             } 
             else if (pwd === 'mime') {
-                // 一般使用者權限：鎖定第3區塊內容，並隱藏懸浮按鈕
                 section3Content.classList.add('locked-mode');
                 fabContainer.style.display = 'none';
                 
@@ -419,9 +416,8 @@
                 setTimeout(() => { document.getElementById('loginOverlay').style.visibility = 'hidden'; }, 500);
             } 
             else {
-                // 密碼錯誤
                 errTxt.innerText = "❌ 密碼錯誤，請重新輸入";
-                void box.offsetWidth; // 觸發重繪
+                void box.offsetWidth; 
                 box.classList.add('shake-anim');
             }
         }
@@ -508,7 +504,7 @@
         let historyStack = []; 
         let inputLayerGroup = L.layerGroup().addTo(map); 
         let s2Layer = L.layerGroup().addTo(map);         
-        let pathLine = L.polyline([], {color: '#2DD4BF', weight: 4, opacity: 0.9}).addTo(map); // 改為薄荷綠路線
+        let pathLine = L.polyline([], {color: '#2DD4BF', weight: 4, opacity: 0.9}).addTo(map); 
         let showS2 = false;
 
         document.getElementById('gpxFileInput').addEventListener('change', loadGPXIntoTextarea);
@@ -616,9 +612,13 @@
         }
 
         // ==========================================
-        // 路徑互動與距離計算
+        // 路徑互動與圖層修復 (核心 Bug 修復區)
         // ==========================================
         function enablePathEditing() {
+            // 【修復】如果發現紅線被踢出畫布，立刻把它重新加回來！
+            if (!map.hasLayer(pathLine)) {
+                pathLine.addTo(map);
+            }
             pathLine.pm.disable(); 
             pathLine.pm.enable({ allowEditing: true, preventMarkerRemoval: false });
             updateDistanceDisplay(); 
@@ -633,8 +633,14 @@
             enablePathEditing();
         });
 
+        // 捕捉右鍵刪除，完美同步清空
+        pathLine.on('pm:remove', function(e) {
+            saveHistoryState();
+            pathLine.setLatLngs([]); // 強制清空記憶體的點位
+            updateDistanceDisplay(); // 觸發清空文字框與距離歸零
+        });
+
         pathLine.on('pm:markerdragstart', saveHistoryState);
-        pathLine.on('pm:remove', saveHistoryState);
         pathLine.on('pm:edit', updateDistanceDisplay);
         pathLine.on('pm:vertexadded', updateDistanceDisplay);
         pathLine.on('pm:vertexremoved', updateDistanceDisplay);
@@ -642,6 +648,14 @@
 
         function updateDistanceDisplay() {
             let latlngs = pathLine.getLatLngs();
+            
+            // 如果點位被刪光，距離歸零，文字框清空
+            if (!latlngs || latlngs.length === 0) {
+                document.getElementById('distanceDisplay').innerText = `📏 路線總距離: 0.00 km`;
+                document.getElementById('routeCoordsOutput').value = "";
+                return;
+            }
+
             let totalMeters = 0;
             let coordsText = ""; 
 
@@ -653,7 +667,6 @@
             }
             let km = totalMeters / 1000;
             document.getElementById('distanceDisplay').innerText = `📏 路線總距離: ${km.toFixed(2)} km`;
-            
             document.getElementById('routeCoordsOutput').value = coordsText.trim();
         }
 
