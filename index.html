@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>皮克敏路線規劃工具 (科技毛玻璃終極版)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    
+    <style>
+        /* ==========================================
+           全域與色彩變數 (科技毛玻璃風格)
+           主色: #1E293B (夜幕藏青)
+           輔色: #64748B (鼠尾草綠)
+           點綴: #2DD4BF (薄荷綠)
+           暖橘: #F97316 (暮光夕橘)
+        ========================================== */
+        :root {
+            --primary-color: #1E293B;
+            --secondary-color: #64748B;
+            --accent-color: #2DD4BF;
+            --warm-color: #F97316;
+            --glass-bg: rgba(30, 41, 59, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; width: 100vw; height: 100vh; height: 100dvh; 
+            font-family: "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
+            background-color: #000; overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        /* 頂部導覽列 (毛玻璃) */
+        header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: white; padding: 10px 15px; display: flex;
+            justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            z-index: 2000; height: 55px; flex-shrink: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        header h1 { margin: 0; font-size: 18px; white-space: nowrap; font-weight: 600; letter-spacing: 1px; color: var(--accent-color);}
+        
+        .btn-icon { background: none; border: none; color: white; font-size: 26px; cursor: pointer; padding: 0 5px; }
+        .btn-help {
+            background: rgba(45, 212, 191, 0.1); color: var(--accent-color); 
+            border: 1px solid var(--accent-color); padding: 6px 12px; 
+            border-radius: 20px; font-weight: bold; font-size: 13px; cursor: pointer; transition: all 0.3s;
+        }
+        .btn-help:hover { background: var(--accent-color); color: var(--primary-color); }
+
+        .main-container { display: flex; flex: 1; position: relative; height: calc(100dvh - 55px); }
+
+        /* 側邊欄 (毛玻璃) */
+        #sidebar {
+            width: 360px; min-width: 360px; height: 100%; 
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border-right: 1px solid var(--glass-border);
+            box-shadow: 5px 0 20px rgba(0,0,0,0.3); z-index: 1500; display: flex; flex-direction: column;
+            overflow-y: auto; overflow-x: hidden; padding: 15px 20px 150px 20px; 
+            color: #f1f5f9; -webkit-overflow-scrolling: touch; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: absolute; left: 0; top: 0; bottom: 0; transform: translateX(0);
+        }
+        
+        /* 捲軸美化 */
+        #sidebar::-webkit-scrollbar { width: 6px; }
+        #sidebar::-webkit-scrollbar-thumb { background: var(--secondary-color); border-radius: 3px; }
+        
+        #sidebarOverlay {
+            display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); z-index: 1400; transition: opacity 0.3s;
+        }
+
+        #map { flex-grow: 1; height: 100%; position: relative; width: 100%; z-index: 1;}
+
+        /* 排版與標題樣式 */
+        .section-title-static, .section-header {
+            font-size: 14px; font-weight: bold; margin-top: 15px; margin-bottom: 8px; color: #fff; 
+            background: rgba(100, 116, 139, 0.3); padding: 10px 12px; 
+            border-left: 4px solid var(--accent-color); border-radius: 0 4px 4px 0;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .section-header {
+            cursor: pointer; display: flex; justify-content: space-between; align-items: center; 
+            user-select: none; transition: background-color 0.2s; border-left-color: var(--secondary-color);
+        }
+        .section-header:hover { background: rgba(100, 116, 139, 0.5); border-left-color: var(--accent-color);}
+        .section-content { display: none; padding: 0 2px; }
+        .section-content.open { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .toggle-icon { font-size: 12px; color: var(--accent-color); font-weight: bold; }
+
+        /* 輸入框與文字區 (暗黑玻璃) */
+        .form-group { margin-bottom: 12px; }
+        input[type="text"], textarea, input[type="number"] { 
+            width: 100%; padding: 10px; font-size: 14px; border-radius: 4px;
+            background: rgba(0, 0, 0, 0.3); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+            transition: border-color 0.2s; outline: none;
+        }
+        input[type="text"]:focus, textarea:focus { border-color: var(--accent-color); }
+        textarea { min-height: 80px; resize: vertical; font-family: monospace; }
+        .help-text { font-size: 12px; color: #cbd5e1; margin-bottom: 10px; line-height: 1.5; }
+
+        .file-input-wrapper { position: relative; margin-bottom: 10px; }
+        .btn-file-import {
+            background: rgba(100, 116, 139, 0.5); color: white; padding: 10px; border-radius: 4px; 
+            cursor: pointer; display: block; width: 100%; text-align: center; font-size: 14px; font-weight: bold;
+            border: 1px solid var(--secondary-color); transition: all 0.2s;
+        }
+        .btn-file-import:hover { background: var(--secondary-color); }
+        #gpxFileInput { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+
+        /* 按鈕樣式 (玻璃質感) */
+        button {
+            padding: 10px; margin-bottom: 8px; color: white; border: none; border-radius: 4px; 
+            cursor: pointer; width: 100%; font-size: 14px; font-weight: bold; transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2); text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        }
+        button:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        button:active { transform: translateY(1px); box-shadow: none; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+        
+        .btn-draw { background: linear-gradient(135deg, #10b981, #059669); }
+        .btn-clear-coords { background: rgba(100, 116, 139, 0.6); border: 1px solid var(--secondary-color); }
+        .btn-road { background: linear-gradient(135deg, #3b82f6, #2563eb); font-size: 14px;}
+        .btn-optimize { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .btn-scan { background: linear-gradient(135deg, #ec4899, #db2777); }
+        .btn-undo { background: rgba(100, 116, 139, 0.8); }
+        .btn-cancel-route { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-export { background: linear-gradient(135deg, var(--warm-color), #ea580c); }
+        .btn-clear-all { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);}
+        .btn-toggle { background: rgba(100, 116, 139, 0.4); border: 1px solid var(--secondary-color);}
+        .btn-toggle.active { background: var(--accent-color); color: var(--primary-color); text-shadow: none;}
+        .btn-copy { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+        .btn-sync { background: linear-gradient(135deg, #0ea5e9, #0284c7); }
+        
+        .flex-row { display: flex; gap: 8px; width: 100%; margin-bottom: 8px; align-items: center; }
+        .flex-row button { margin-bottom: 0; flex: 1; padding: 10px 2px; font-size: 13px;}
+        
+        .setting-box {
+            background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; 
+            padding: 8px 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .setting-box label { font-size: 13px; font-weight: bold; color: #e2e8f0; }
+        .setting-box input[type="number"] { width: 70px; padding: 6px; text-align: center;}
+
+        /* 距離顯示 (暖橘高亮) */
+        .distance-display {
+            background: rgba(249, 115, 22, 0.15); color: var(--warm-color); font-size: 16px; font-weight: bold; 
+            padding: 12px; border-radius: 4px; text-align: center; border: 1px solid var(--warm-color); 
+            margin: 10px 0; text-shadow: 0 1px 3px rgba(0,0,0,0.5); box-shadow: 0 0 10px rgba(249, 115, 22, 0.1);
+        }
+
+        /* 國家資訊框 */
+        .location-info-box {
+            background: rgba(45, 212, 191, 0.1); border: 1px solid rgba(45, 212, 191, 0.3); border-radius: 4px;
+            padding: 10px; margin-bottom: 12px; font-size: 13px; color: var(--accent-color);
+            display: flex; flex-direction: column; gap: 8px; line-height: 1.4;
+        }
+        .location-info-text { font-weight: bold; }
+        .btn-loc-sync {
+            background: rgba(45, 212, 191, 0.2); color: var(--accent-color); border: 1px solid var(--accent-color);
+            padding: 6px; margin: 0; border-radius: 4px; font-size: 12px; box-shadow: none;
+        }
+        .btn-loc-sync:hover { background: var(--accent-color); color: var(--primary-color); }
+
+        /* FABs 懸浮按鈕 (玻璃質感) */
+        .map-fabs {
+            position: absolute; bottom: 30px; right: 15px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;
+        }
+        .fab {
+            background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2); color: #fff;
+            width: 45px; height: 45px; border-radius: 50%; font-size: 18px;
+            display: flex; justify-content: center; align-items: center; cursor: pointer; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: transform 0.1s, border-color 0.2s; padding: 0; margin: 0;
+        }
+        .fab:hover { border-color: var(--accent-color); }
+        .fab:active { transform: scale(0.9); background: var(--primary-color); }
+
+        /* 手機版 RWD */
+        @media (max-width: 768px) {
+            #sidebar { width: 85%; min-width: 280px; max-width: 400px; transform: translateX(-100%); }
+            #sidebar.open { transform: translateX(0); }
+            .map-fabs {
+                bottom: 25px; left: 50%; right: auto; transform: translateX(-50%);
+                flex-direction: row; gap: 8px; width: max-content;
+            }
+            .fab { width: 42px; height: 42px; font-size: 16px; }
+            .leaflet-control-attribution { margin-bottom: 85px !important; }
+        }
+        #sidebar.collapsed { transform: translateX(-100%); }
+
+        /* ====== 登入遮罩 (毛玻璃) ====== */
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            z-index: 9999; display: flex; justify-content: center; align-items: center;
+            transition: opacity 0.5s ease, visibility 0.5s;
+        }
+        .login-box {
+            background: rgba(30, 41, 59, 0.8); border: 1px solid var(--accent-color);
+            padding: 40px 30px; border-radius: 12px; width: 90%; max-width: 320px;
+            box-shadow: 0 0 30px rgba(45, 212, 191, 0.2); text-align: center;
+        }
+        .login-box h2 { color: var(--accent-color); margin-top: 0; margin-bottom: 20px; font-size: 22px; letter-spacing: 2px;}
+        .login-box input {
+            width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.5); color: #fff; font-size: 16px; text-align: center; letter-spacing: 2px;
+        }
+        .login-box input:focus { border-color: var(--accent-color); outline: none; }
+        .login-box button { background: linear-gradient(135deg, #14b8a6, #0d9488); font-size: 16px; padding: 12px;}
+        #loginError { color: #ef4444; font-size: 13px; font-weight: bold; margin-top: 10px; min-height: 20px; display: block;}
+        
+        /* 密碼錯誤震動動畫 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-10px); }
+            40%, 80% { transform: translateX(10px); }
+        }
+        .shake-anim { animation: shake 0.4s ease-in-out; border-color: #ef4444 !important;}
+
+        /* ====== 鎖定模式樣式 ====== */
+        .locked-mode {
+            opacity: 0.35 !important;
+            pointer-events: none !important;
+            filter: grayscale(100%) !important;
+        }
+
+        /* 教學視窗 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.7); z-index: 3000; display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: var(--primary-color); border: 1px solid var(--secondary-color); color: #fff;
+            width: 90%; max-width: 500px; border-radius: 8px; padding: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-height: 85vh; overflow-y: auto;
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--secondary-color); padding-bottom: 10px; margin-bottom: 15px;
+        }
+        .modal-header h2 { margin: 0; color: var(--accent-color); font-size: 18px;}
+        .close-modal { background: none; border: none; font-size: 28px; color: #94a3b8; cursor: pointer; padding: 0; margin: 0; box-shadow: none;}
+        .close-modal:hover { color: #fff; background: none; transform: none;}
+        .tutorial-list { padding-left: 20px; font-size: 14px; color: #e2e8f0; }
+        .tutorial-list li { margin-bottom: 10px; line-height: 1.6; }
+        .highlight { color: var(--accent-color); font-weight: bold; }
+        .highlight-warm { color: var(--warm-color); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <!-- ====== 登入遮罩 ====== -->
+    <div id="loginOverlay">
+        <div class="login-box" id="loginBox">
+            <h2>系統登入</h2>
+            <input type="password" id="passwordInput" placeholder="請輸入密碼" onkeypress="handleEnter(event)">
+            <button onclick="checkPassword()">解鎖進入</button>
+            <span id="loginError"></span>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-left">
+            <button class="btn-icon" onclick="toggleSidebar(true)">☰</button>
+            <h1>🌱 皮克敏路線工具</h1>
+        </div>
+        <button class="btn-help" onclick="openModal()">📖 系統說明</button>
+    </header>
+
+    <div class="main-container">
+        <div id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
+
+        <div id="sidebar">
+            <!-- 第 1 區塊 -->
+            <div class="section-title-static">📂 1. 檔案與地區設定</div>
+            <div class="form-group">
+                <input type="text" id="fileNameInput" value="pikmin_route" placeholder="匯出 GPX 檔案名稱">
+            </div>
+            
+            <div class="location-info-box">
+                <div class="location-info-text" id="locationInfoText">📍 位置: (未判定)<br>⏱️ 與台北時差: (未判定)</div>
+                <button class="btn-loc-sync" onclick="updateLocationInfo()" id="btnLocSync">🔄 重新判斷地點與時差</button>
+            </div>
+            
+            <div class="file-input-wrapper">
+                <span class="btn-file-import">📥 讀取 GPX 提取座標</span>
+                <input type="file" id="gpxFileInput" accept=".gpx">
+            </div>
+
+            <!-- 第 2 區塊 -->
+            <div class="section-header" onclick="toggleSection(this)">
+                <span>📍 2. 種花基準點 (50m 圓形)</span>
+                <span class="toggle-icon">▶</span>
+            </div>
+            <div class="section-content">
+                <textarea id="coordsInput" placeholder="25.033964, 121.564468&#10;25.034500, 121.565000"></textarea>
+                <div class="flex-row" style="margin-bottom: 12px;">
+                    <button class="btn-draw" style="flex: 2;" onclick="processInputCoords()">➕ 繪製點位</button>
+                    <button class="btn-clear-coords" style="flex: 1;" onclick="clearCoordinates()">🗑️ 清空座標</button>
+                </div>
+            </div>
+            
+            <!-- 第 3 區塊 (權限控管區塊) -->
+            <div class="section-header" onclick="toggleSection(this)">
+                <span>👣 3. 路線規劃模式</span>
+                <span class="toggle-icon">▶</span>
+            </div>
+            <div class="section-content" id="planningSectionContent">
+                <div class="help-text">
+                    * <span style="color:var(--accent-color);">【步行模式】</span>：&gt;100m 沿路走碰到 15m 切邊換點，&lt;100m 直穿公園。
+                </div>
+                <button class="btn-road" id="btnRoadMode" onclick="generateSmartEdgeRoute()">🚶 步行模式 (15m切邊 + 公園直穿)</button>
+                <div class="flex-row">
+                    <button class="btn-optimize" onclick="generateOptimizedRoute()">✨ 無重疊(中心)</button>
+                    <button class="btn-scan" onclick="generateScanRoute()">🎯 掃描</button>
+                </div>
+                <div class="setting-box">
+                    <label for="scanIntervalInput">📏 掃描間隔 (公尺):</label>
+                    <input type="number" id="scanIntervalInput" value="30" min="5" step="5">
+                </div>
+                <div class="flex-row" style="margin-top:10px;">
+                    <button class="btn-undo" onclick="undoAction()">⏪ 復原</button>
+                    <button class="btn-cancel-route" onclick="clearRouteOnly()">❌ 清除路線</button>
+                </div>
+            </div>
+            
+            <div class="distance-display" id="distanceDisplay">📏 路線總距離: 0.00 km</div>
+            
+            <!-- 第 4 區塊 -->
+            <div class="section-title-static">📝 4. 路線座標 (雙向連動)</div>
+            <div class="help-text">
+                * 即時顯示地圖上的紅線座標。可手動修改後「更新至地圖」。
+            </div>
+            <textarea id="routeCoordsOutput" placeholder="產生的路徑座標會自動顯示在這裡..."></textarea>
+            <div class="flex-row">
+                <button class="btn-copy" onclick="copyRouteCoords()">📋 複製座標</button>
+                <button class="btn-sync" onclick="updateMapFromRouteCoords()">🔄 更新至地圖</button>
+            </div>
+            
+            <!-- 第 5 區塊 -->
+            <div class="section-title-static">🗺️ 5. 地圖與匯出工具</div>
+            <button id="s2ToggleBtn" class="btn-toggle" onclick="toggleS2Grid()">🌐 網格：S2 Cell (Lv.17) [關閉中]</button>
+            <button class="btn-clear-all" onclick="clearMapWithConfirm()">🗑️ 清除地圖資料</button>
+            <button class="btn-export" style="margin-top: 10px;" onclick="exportGPX()">📤 下載路線檔案 (GPX)</button>
+        </div>
+
+        <div id="map">
+            <!-- 懸浮快捷按鈕 (FABs - 權限控管區塊) -->
+            <div class="map-fabs" id="mapFabsContainer">
+                <button class="fab fab-road" id="btnFabRoad" title="步行模式 (15m切邊)">🚶</button>
+                <button class="fab fab-opt" id="btnFabOpt" title="無重疊中心連線">✨</button>
+                <button class="fab fab-scan" id="btnFabScan" title="掃描模式">🎯</button>
+                <button class="fab fab-undo" id="btnFabUndo" title="復原">⏪</button>
+                <button class="fab fab-clear" id="btnFabClear" title="清除路線">❌</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 教學彈出視窗 -->
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📖 系統說明 (權限分級)</h2>
+                <button class="close-modal" onclick="closeModal()">×</button>
+            </div>
+            <ul class="tutorial-list">
+                <li><b class="highlight">🔐 權限機制：</b>系統分為管理員 (adminccfh) 與一般使用者 (mime)。一般使用者將無法使用自動路線規劃與快捷懸浮按鈕。如需切換身分，請<b class="highlight-warm">重新整理網頁 (F5)</b>。</li>
+                <li><b class="highlight">🌌 科技玻璃風格：</b>全新升級的深色半透明 UI，搭配原版明亮地圖圖資，提供頂級視覺與操作體驗。</li>
+                <li><b>🌍 地理判定：</b>自動抓取座標，判斷國家(中文)與城市(英文)，並計算與台北的時差。</li>
+                <li><b>🚶 步行切邊演算法：</b>管理員專屬功能，導航碰到 15m 範圍就前往下個點，公園自動直穿。</li>
+                <li><b>📝 雙向連動：</b>可直接修改第 4 區文字並更新回地圖，同步率 100%。</li>
+            </ul>
+            <button class="btn-draw" style="margin-top:10px;" onclick="closeModal()">了解</button>
+        </div>
+    </div>
+
+    <!-- JS 資源 -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+    <script src="https://unpkg.com/s2-geometry@1.2.10/src/s2geometry.js"></script>
+
+    <script>
+        // ==========================================
+        // 🔐 登入與權限管理邏輯
+        // ==========================================
+        function handleEnter(e) {
+            if (e.key === 'Enter') checkPassword();
+        }
+
+        function checkPassword() {
+            const pwd = document.getElementById('passwordInput').value.trim();
+            const errTxt = document.getElementById('loginError');
+            const box = document.getElementById('loginBox');
+            const section3Content = document.getElementById('planningSectionContent');
+            const fabContainer = document.getElementById('mapFabsContainer');
+
+            // 移除動畫class，方便重複觸發
+            box.classList.remove('shake-anim');
+
+            if (pwd === 'adminccfh') {
+                // 管理員權限
+                document.getElementById('loginOverlay').style.opacity = '0';
+                setTimeout(() => { document.getElementById('loginOverlay').style.visibility = 'hidden'; }, 500);
+            } 
+            else if (pwd === 'mime') {
+                // 一般使用者權限：鎖定第3區塊內容，並隱藏懸浮按鈕
+                section3Content.classList.add('locked-mode');
+                fabContainer.style.display = 'none';
+                
+                document.getElementById('loginOverlay').style.opacity = '0';
+                setTimeout(() => { document.getElementById('loginOverlay').style.visibility = 'hidden'; }, 500);
+            } 
+            else {
+                // 密碼錯誤
+                errTxt.innerText = "❌ 密碼錯誤，請重新輸入";
+                void box.offsetWidth; // 觸發重繪
+                box.classList.add('shake-anim');
+            }
+        }
+
+        // ==========================================
+        // UI 收合與介面控制
+        // ==========================================
+        function toggleSection(headerElement) {
+            const content = headerElement.nextElementSibling;
+            const icon = headerElement.querySelector('.toggle-icon');
+            if (content.classList.contains('open')) {
+                content.classList.remove('open');
+                icon.innerText = '▶';
+            } else {
+                content.classList.add('open');
+                icon.innerText = '▼';
+            }
+        }
+
+        function openModal() { document.getElementById('helpModal').style.display = 'flex'; }
+        function closeModal() { document.getElementById('helpModal').style.display = 'none'; }
+        
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        
+        function toggleSidebar(forceOpen) {
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                if (forceOpen === true) sidebar.classList.add('open');
+                else if (forceOpen === false) sidebar.classList.remove('open');
+                else sidebar.classList.toggle('open');
+                overlay.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+            } else {
+                sidebar.classList.toggle('collapsed');
+            }
+            setTimeout(() => { map.invalidateSize(); }, 350);
+        }
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                overlay.style.display = 'none';
+                sidebar.classList.remove('open');
+            }
+        });
+
+        // ==========================================
+        // 地圖初始化 (明亮地圖)
+        // ==========================================
+        const map = L.map('map', {zoomControl: false}).setView([25.033964, 121.564468], 15);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19, attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        setTimeout(() => { map.invalidateSize(); }, 300);
+
+        // 防 FAB 點擊穿透
+        const fabContainer = document.getElementById('mapFabsContainer');
+        L.DomEvent.disableClickPropagation(fabContainer);
+        L.DomEvent.disableScrollPropagation(fabContainer);
+        const stopEvents = ['touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup'];
+        stopEvents.forEach(evt => {
+            fabContainer.addEventListener(evt, function(e) { e.stopPropagation(); }, { passive: false });
+        });
+
+        function bindFabAction(btnId, actionFunc) {
+            const btn = document.getElementById(btnId);
+            const handler = (e) => { e.preventDefault(); e.stopPropagation(); actionFunc(); };
+            btn.addEventListener('click', handler);
+            btn.addEventListener('touchend', handler);
+        }
+
+        bindFabAction('btnFabRoad', generateSmartEdgeRoute);
+        bindFabAction('btnFabOpt', generateOptimizedRoute);
+        bindFabAction('btnFabScan', generateScanRoute);
+        bindFabAction('btnFabUndo', undoAction);
+        bindFabAction('btnFabClear', clearRouteOnly);
+
+        // ==========================================
+        // 系統變數
+        // ==========================================
+        let inputPoints = []; 
+        let historyStack = []; 
+        let inputLayerGroup = L.layerGroup().addTo(map); 
+        let s2Layer = L.layerGroup().addTo(map);         
+        let pathLine = L.polyline([], {color: '#2DD4BF', weight: 4, opacity: 0.9}).addTo(map); // 改為薄荷綠路線
+        let showS2 = false;
+
+        document.getElementById('gpxFileInput').addEventListener('change', loadGPXIntoTextarea);
+
+        // ==========================================
+        // 地理與時區反查
+        // ==========================================
+        function getFirstCoordinate() {
+            let text1 = document.getElementById('coordsInput').value.trim();
+            if (text1) {
+                let lines = text1.split('\n');
+                for (let line of lines) {
+                    let parts = line.replace('，', ',').split(',');
+                    if (parts.length >= 2) {
+                        let lat = parseFloat(parts[0].trim());
+                        let lng = parseFloat(parts[1].trim());
+                        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+                    }
+                }
+            }
+            let text2 = document.getElementById('routeCoordsOutput').value.trim();
+            if (text2) {
+                let lines = text2.split('\n');
+                for (let line of lines) {
+                    let parts = line.replace('，', ',').split(',');
+                    if (parts.length >= 2) {
+                        let lat = parseFloat(parts[0].trim());
+                        let lng = parseFloat(parts[1].trim());
+                        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+                    }
+                }
+            }
+            return null;
+        }
+
+        async function updateLocationInfo() {
+            const btn = document.getElementById('btnLocSync');
+            const infoText = document.getElementById('locationInfoText');
+            const coord = getFirstCoordinate();
+
+            if (!coord) {
+                alert("請先輸入至少一組座標。");
+                return;
+            }
+
+            btn.innerHTML = "⏳ 網路判定中...";
+            btn.disabled = true;
+            infoText.innerHTML = `📍 位置: 尋找中...<br>⏱️ 與台北時差: 計算中...`;
+
+            try {
+                let resZh = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coord.lat}&lon=${coord.lng}&zoom=10&accept-language=zh-TW`);
+                let dataZh = await resZh.json();
+                let country = dataZh.address ? (dataZh.address.country || "未知國家") : "未知國家";
+
+                await new Promise(r => setTimeout(r, 1000)); 
+
+                let resEn = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coord.lat}&lon=${coord.lng}&zoom=14&accept-language=en`);
+                let dataEn = await resEn.json();
+                let city = "Unknown City";
+                if (dataEn.address) {
+                    city = dataEn.address.city || dataEn.address.town || dataEn.address.village || dataEn.address.county || dataEn.address.state || "Unknown Area";
+                }
+
+                let resTz = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coord.lat}&longitude=${coord.lng}&current_weather=true&timezone=auto`);
+                let dataTz = await resTz.json();
+                let diffStr = "(無法計算)";
+                
+                if (dataTz.utc_offset_seconds !== undefined) {
+                    let offsetSeconds = dataTz.utc_offset_seconds;
+                    let taipeiOffset = 28800; 
+                    let diffHours = (offsetSeconds - taipeiOffset) / 3600;
+                    
+                    if (diffHours > 0) diffStr = `+${diffHours} 小時`;
+                    else if (diffHours < 0) diffStr = `${diffHours} 小時`;
+                    else diffStr = `0 小時 (無時差)`;
+                }
+
+                infoText.innerHTML = `📍 位置: ${country} (${city})<br>⏱️ 與台北時差: ${diffStr}`;
+
+            } catch (err) {
+                console.error("API 判定失敗", err);
+                infoText.innerHTML = `📍 位置: 判定失敗<br>⏱️ 與台北時差: 判定失敗`;
+                alert("判定失敗，請確認網路連線。");
+            } finally {
+                btn.innerHTML = "🔄 重新判斷地點與時差";
+                btn.disabled = false;
+            }
+        }
+
+        // ==========================================
+        // 復原系統 (Undo)
+        // ==========================================
+        function saveHistoryState() {
+            let currentLatLngs = pathLine.getLatLngs().map(latlng => L.latLng(latlng.lat, latlng.lng));
+            historyStack.push(currentLatLngs);
+            if (historyStack.length > 50) historyStack.shift();
+        }
+
+        function undoAction() {
+            if (historyStack.length === 0) { alert("目前沒有上一個動作可以復原！"); return; }
+            let previousState = historyStack.pop();
+            pathLine.setLatLngs(previousState);
+            enablePathEditing();
+            updateDistanceDisplay();
+        }
+
+        // ==========================================
+        // 路徑互動與距離計算
+        // ==========================================
+        function enablePathEditing() {
+            pathLine.pm.disable(); 
+            pathLine.pm.enable({ allowEditing: true, preventMarkerRemoval: false });
+            updateDistanceDisplay(); 
+        }
+
+        map.on('click', function(e) {
+            if (e.originalEvent.defaultPrevented) return; 
+            saveHistoryState(); 
+            let latlngs = pathLine.getLatLngs();
+            latlngs.push(e.latlng);
+            pathLine.setLatLngs(latlngs);
+            enablePathEditing();
+        });
+
+        pathLine.on('pm:markerdragstart', saveHistoryState);
+        pathLine.on('pm:remove', saveHistoryState);
+        pathLine.on('pm:edit', updateDistanceDisplay);
+        pathLine.on('pm:vertexadded', updateDistanceDisplay);
+        pathLine.on('pm:vertexremoved', updateDistanceDisplay);
+        pathLine.on('pm:markerdragend', updateDistanceDisplay);
+
+        function updateDistanceDisplay() {
+            let latlngs = pathLine.getLatLngs();
+            let totalMeters = 0;
+            let coordsText = ""; 
+
+            for(let i = 0; i < latlngs.length; i++) {
+                if (i < latlngs.length - 1) {
+                    totalMeters += map.distance(latlngs[i], latlngs[i+1]);
+                }
+                coordsText += `${latlngs[i].lat.toFixed(6)}, ${latlngs[i].lng.toFixed(6)}\n`;
+            }
+            let km = totalMeters / 1000;
+            document.getElementById('distanceDisplay').innerText = `📏 路線總距離: ${km.toFixed(2)} km`;
+            
+            document.getElementById('routeCoordsOutput').value = coordsText.trim();
+        }
+
+        function getMergedPoints() {
+            let allPoints = [...inputPoints];
+            pathLine.getLatLngs().forEach(pathNode => {
+                let isDuplicate = allPoints.some(ip => map.distance([ip.lat, ip.lng], [pathNode.lat, pathNode.lng]) < 3);
+                if (!isDuplicate) allPoints.push({ lat: pathNode.lat, lng: pathNode.lng });
+            });
+            return allPoints;
+        }
+
+        // ==========================================
+        // 路線座標複製與更新地圖
+        // ==========================================
+        function copyRouteCoords() {
+            const text = document.getElementById('routeCoordsOutput').value;
+            if (!text) { alert("目前沒有座標可以複製！"); return; }
+            navigator.clipboard.writeText(text).then(() => {
+                alert("✅ 路線座標已成功複製到剪貼簿！");
+            }).catch(err => {
+                alert("複製失敗，請手動全選文字複製。");
+            });
+        }
+
+        function updateMapFromRouteCoords() {
+            const text = document.getElementById('routeCoordsOutput').value;
+            if (!text.trim()) { alert("文字框是空的，無法更新！"); return; }
+
+            const lines = text.split('\n');
+            let newLatLngs = [];
+
+            lines.forEach(line => {
+                const parts = line.replace('，', ',').split(',');
+                if (parts.length >= 2) {
+                    const lat = parseFloat(parts[0].trim());
+                    const lng = parseFloat(parts[1].trim());
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        newLatLngs.push([lat, lng]);
+                    }
+                }
+            });
+
+            if (newLatLngs.length > 0) {
+                saveHistoryState();
+                pathLine.setLatLngs(newLatLngs);
+                enablePathEditing();
+                alert("🔄 地圖路線已成功更新！");
+            } else {
+                alert("⚠️ 座標格式有誤，請確認每一行都是「緯度, 經度」的格式。");
+            }
+        }
+
+        // ==========================================
+        // 幾何與演算法輔助 (管理員使用)
+        // ==========================================
+        function getAngle(p1, p2) {
+            const dLat = p2.lat - p1.lat;
+            const dLng = (p2.lng - p1.lng) * Math.cos(p1.lat * Math.PI / 180);
+            return Math.atan2(dLat, dLng);
+        }
+
+        function polarToLatLng(center, rMeters, angleRad) {
+            const R = 6378137;
+            const dLat = (rMeters * Math.sin(angleRad)) / R * (180 / Math.PI);
+            const dLng = (rMeters * Math.cos(angleRad)) / (R * Math.cos(center.lat * Math.PI / 180)) * (180 / Math.PI);
+            return [center.lat + dLat, center.lng + dLng];
+        }
+
+        function getEdgePoint(center, target, radius) {
+            let d = map.distance(center, target);
+            if (d <= radius) return center; 
+            let angle = getAngle(center, target);
+            let edge = polarToLatLng(center, radius, angle);
+            return { lat: edge[0], lng: edge[1] };
+        }
+
+        function getOptimizedSequence(pointsArray) {
+            let bestPath = [];
+            let minTotalDist = Infinity;
+            for (let startIdx = 0; startIdx < pointsArray.length; startIdx++) {
+                let unvisited = [...pointsArray];
+                let current = unvisited.splice(startIdx, 1)[0];
+                let path = [current];
+                let totalDist = 0;
+                while (unvisited.length > 0) {
+                    let nearestIdx = -1, minDist = Infinity;
+                    for (let i = 0; i < unvisited.length; i++) {
+                        let d = map.distance([current.lat, current.lng], [unvisited[i].lat, unvisited[i].lng]);
+                        if (d < minDist) { minDist = d; nearestIdx = i; }
+                    }
+                    totalDist += minDist;
+                    current = unvisited.splice(nearestIdx, 1)[0];
+                    path.push(current);
+                }
+                if (totalDist < minTotalDist) { minTotalDist = totalDist; bestPath = path; }
+            }
+            let improved = true; let iterations = 0; const MAX_ITERATIONS = 50; 
+            while (improved && iterations < MAX_ITERATIONS) {
+                improved = false; iterations++;
+                for (let i = 0; i < bestPath.length - 2; i++) {
+                    for (let j = i + 2; j < bestPath.length - 1; j++) {
+                        let d1 = map.distance([bestPath[i].lat, bestPath[i].lng], [bestPath[i+1].lat, bestPath[i+1].lng]) + 
+                                 map.distance([bestPath[j].lat, bestPath[j].lng], [bestPath[j+1].lat, bestPath[j+1].lng]);
+                        let d2 = map.distance([bestPath[i].lat, bestPath[i].lng], [bestPath[j].lat, bestPath[j].lng]) + 
+                                 map.distance([bestPath[i+1].lat, bestPath[i+1].lng], [bestPath[j+1].lat, bestPath[j+1].lng]);
+                        if (d2 < d1 - 0.001) {
+                            bestPath = bestPath.slice(0, i + 1).concat(bestPath.slice(i + 1, j + 1).reverse()).concat(bestPath.slice(j + 1));
+                            improved = true;
+                        }
+                    }
+                }
+            }
+            return bestPath;
+        }
+
+        async function fetchOSRM(p1, p2) {
+            let url = `https://router.project-osrm.org/route/v1/foot/${p1.lng},${p1.lat};${p2.lng},${p2.lat}?geometries=geojson&continue_straight=false`;
+            try {
+                let res = await fetch(url);
+                if (res.ok) {
+                    let data = await res.json();
+                    if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                        return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                    }
+                }
+            } catch(e) {}
+            return null;
+        }
+
+        async function generateSmartEdgeRoute() {
+            let allPoints = getMergedPoints();
+            if (allPoints.length < 2) { alert("需要至少 2 個點位"); return; }
+            
+            const btn = document.getElementById('btnRoadMode');
+            const origText = btn.innerHTML;
+            btn.innerHTML = "⏳ 智慧路徑運算中..."; btn.disabled = true;
+
+            try {
+                let orderedPts = getOptimizedSequence(allPoints);
+                let finalPath = [];
+
+                for (let i = 0; i < orderedPts.length - 1; i++) {
+                    let p1 = orderedPts[i];
+                    let p2 = orderedPts[i+1];
+                    let routeCoords = [];
+                    let isStraight = false;
+
+                    if (map.distance(p1, p2) < 100) {
+                        isStraight = true;
+                    } else {
+                        let res = await fetchOSRM(p1, p2);
+                        if (res && res.length >= 2) routeCoords = res;
+                        else isStraight = true; 
+                        await new Promise(r => setTimeout(r, 300));
+                    }
+
+                    if (isStraight) {
+                        if (map.distance(p1, p2) <= 30) {
+                            let mid = { lat: (p1.lat + p2.lat)/2, lng: (p1.lng + p2.lng)/2 };
+                            routeCoords = [[mid.lat, mid.lng]];
+                        } else {
+                            let e1 = getEdgePoint(p1, p2, 15);
+                            let e2 = getEdgePoint(p2, p1, 15);
+                            routeCoords = [[e1.lat, e1.lng], [e2.lat, e2.lng]];
+                        }
+                    } else {
+                        let rStart = { lat: routeCoords[0][0], lng: routeCoords[0][1] };
+                        let rEnd = { lat: routeCoords[routeCoords.length-1][0], lng: routeCoords[routeCoords.length-1][1] };
+                        
+                        if (map.distance(p1, rStart) > 15) {
+                            let e1 = getEdgePoint(p1, rStart, 15);
+                            routeCoords.unshift([e1.lat, e1.lng]);
+                        }
+                        if (map.distance(p2, rEnd) > 15) {
+                            let e2 = getEdgePoint(p2, rEnd, 15);
+                            routeCoords.push([e2.lat, e2.lng]);
+                        }
+                    }
+
+                    if (finalPath.length > 0 && routeCoords.length > 0) {
+                        let lastFp = finalPath[finalPath.length - 1];
+                        let firstRc = routeCoords[0];
+                        if (map.distance({lat: lastFp[0], lng: lastFp[1]}, {lat: firstRc[0], lng: firstRc[1]}) < 2) {
+                            routeCoords.shift();
+                        }
+                    }
+                    finalPath.push(...routeCoords);
+                }
+                
+                saveHistoryState();
+                pathLine.setLatLngs(finalPath);
+                enablePathEditing(); 
+                if (window.innerWidth <= 768) toggleSidebar(false);
+
+            } catch (err) {
+                alert("運算發生異常，請檢查網路連線。"); 
+            } finally {
+                btn.innerHTML = origText; btn.disabled = false;
+            }
+        }
+
+        function generateOptimizedRoute() {
+            let allPoints = getMergedPoints();
+            if (allPoints.length < 2) { alert("需要至少 2 個點位"); return; }
+            saveHistoryState(); 
+            let bestSeq = getOptimizedSequence(allPoints);
+            pathLine.setLatLngs(bestSeq.map(p => [p.lat, p.lng]));
+            enablePathEditing();
+            if(window.innerWidth <= 768) toggleSidebar(false);
+        }
+
+        function generateScanRoute() {
+            let allPoints = getMergedPoints();
+            if (allPoints.length < 3) { alert("掃描模式需要至少 3 個點位來構成邊界。"); return; }
+
+            let userSpacing = parseFloat(document.getElementById('scanIntervalInput').value);
+            let spacing = (isNaN(userSpacing) || userSpacing <= 0) ? 30 : userSpacing;
+
+            let meanLat = allPoints.reduce((s, p) => s + p.lat, 0) / allPoints.length;
+            const R = 6378137; 
+            const toX = (lng) => lng * Math.PI / 180 * R * Math.cos(meanLat * Math.PI / 180);
+            const toY = (lat) => lat * Math.PI / 180 * R;
+            const toLng = (x) => x * 180 / (Math.PI * R * Math.cos(meanLat * Math.PI / 180));
+            const toLat = (y) => y * 180 / (Math.PI * R);
+
+            let pts = allPoints.map(p => ({ x: toX(p.lng), y: toY(p.lat) }));
+
+            pts.sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+            const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+            let lower = [];
+            for (let i = 0; i < pts.length; i++) {
+                while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
+                lower.push(pts[i]);
+            }
+            let upper = [];
+            for (let i = pts.length - 1; i >= 0; i--) {
+                while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) upper.pop();
+                upper.push(pts[i]);
+            }
+            lower.pop(); upper.pop();
+            let hull = lower.concat(upper);
+
+            let minHeight = Infinity, optAngle = 0;
+            for (let i = 0; i < hull.length; i++) {
+                let p1 = hull[i], p2 = hull[(i + 1) % hull.length];
+                let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                let min_y = Infinity, max_y = -Infinity;
+                for (let p of hull) {
+                    let ry = -p.x * Math.sin(-angle) + p.y * Math.cos(-angle);
+                    if (ry < min_y) min_y = ry;
+                    if (ry > max_y) max_y = ry;
+                }
+                if (max_y - min_y < minHeight) { minHeight = max_y - min_y; optAngle = angle; }
+            }
+
+            let rotatedHull = hull.map(p => ({
+                x: p.x * Math.cos(-optAngle) - p.y * Math.sin(-optAngle),
+                y: p.x * Math.sin(-optAngle) + p.y * Math.cos(-optAngle)
+            }));
+            
+            let minY = Math.min(...rotatedHull.map(p => p.y));
+            let maxY = Math.max(...rotatedHull.map(p => p.y));
+            
+            let scanPath = [];
+            let startY = minY + (spacing / 2); 
+            let leftToRight = true;
+            for (let y = startY; y <= maxY; y += spacing) {
+                let intersects = [];
+                for (let i = 0; i < rotatedHull.length; i++) {
+                    let p1 = rotatedHull[i], p2 = rotatedHull[(i + 1) % rotatedHull.length];
+                    if ((p1.y <= y && p2.y > y) || (p1.y > y && p2.y <= y)) {
+                        let ix = p1.x + (y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
+                        intersects.push(ix);
+                    }
+                }
+                intersects.sort((a, b) => a - b);
+                if (intersects.length >= 2) {
+                    let pA = {x: intersects[0], y: y}, pB = {x: intersects[intersects.length - 1], y: y};
+                    if (leftToRight) scanPath.push(pA, pB);
+                    else scanPath.push(pB, pA);
+                    leftToRight = !leftToRight;
+                }
+            }
+            
+            let finalLatLngs = scanPath.map(p => {
+                let origX = p.x * Math.cos(optAngle) - p.y * Math.sin(optAngle);
+                let origY = p.x * Math.sin(optAngle) + p.y * Math.cos(optAngle);
+                return [toLat(origY), toLng(origX)];
+            });
+            
+            saveHistoryState();
+            pathLine.setLatLngs(finalLatLngs);
+            enablePathEditing();
+            if(window.innerWidth <= 768) toggleSidebar(false);
+        }
+
+        // ==========================================
+        // 點位與資料清除
+        // ==========================================
+        function clearRouteOnly() {
+            if (pathLine.getLatLngs().length === 0) return;
+            saveHistoryState();
+            pathLine.setLatLngs([]);
+            pathLine.pm.disable();
+            updateDistanceDisplay();
+        }
+
+        function clearCoordinates() {
+            document.getElementById('coordsInput').value = '';
+            inputPoints = [];
+            inputLayerGroup.clearLayers();
+        }
+
+        function processInputCoords() {
+            const text = document.getElementById('coordsInput').value;
+            if (!text.trim()) { alert("請先輸入座標！"); return; }
+
+            const lines = text.split('\n');
+            let addedCount = 0; let bounds = [];
+
+            inputLayerGroup.clearLayers(); inputPoints = [];
+
+            lines.forEach(line => {
+                const parts = line.replace('，', ',').split(',');
+                if(parts.length >= 2) {
+                    const lat = parseFloat(parts[0].trim()), lng = parseFloat(parts[1].trim());
+                    if(!isNaN(lat) && !isNaN(lng)) {
+                        inputPoints.push({lat: lat, lng: lng});
+                        const latlng = [lat, lng];
+                        L.marker(latlng).bindPopup(`基準點<br>${lat.toFixed(5)}, ${lng.toFixed(5)}`).addTo(inputLayerGroup);
+                        L.circle(latlng, { color: '#2DD4BF', fillColor: '#2DD4BF', fillOpacity: 0.15, weight: 2, radius: 50 }).addTo(inputLayerGroup);
+                        bounds.push(latlng); addedCount++;
+                    }
+                }
+            });
+
+            if (addedCount > 0) {
+                map.fitBounds(bounds, { padding: [50, 50] }); 
+                if(window.innerWidth <= 768) toggleSidebar(false);
+            } else { alert("無法解析座標，請確認格式。"); }
+        }
+
+        function loadGPXIntoTextarea(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const xmlDoc = new DOMParser().parseFromString(evt.target.result, "text/xml");
+                    const wpts = xmlDoc.getElementsByTagName("wpt");
+                    if (wpts.length === 0) { alert("找不到 <wpt> 資料。"); return; }
+                    let coordsText = "";
+                    for (let i = 0; i < wpts.length; i++) {
+                        const lat = parseFloat(wpts[i].getAttribute("lat")), lon = parseFloat(wpts[i].getAttribute("lon"));
+                        if (!isNaN(lat) && !isNaN(lon)) coordsText += `${lat.toFixed(6)}, ${lon.toFixed(6)}\n`;
+                    }
+                    document.getElementById('coordsInput').value = coordsText.trim();
+                    document.getElementById('fileNameInput').value = file.name.replace(/\.[^/.]+$/, "");
+                    alert(`成功提取 ${wpts.length} 個點位。`);
+                } catch (err) { alert("GPX 檔案解析失敗。"); }
+            };
+            reader.readAsText(file); e.target.value = ''; 
+        }
+
+        function exportGPX() {
+            let pathLatLngs = pathLine.getLatLngs();
+            if (inputPoints.length === 0 && pathLatLngs.length === 0) { alert("沒有資料可匯出！"); return; }
+            let fileName = document.getElementById('fileNameInput').value.trim() || "pikmin_route";
+            let gpxContent = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="PikminPlanner">\n';
+            pathLatLngs.forEach((latlng, index) => {
+                gpxContent += `  <wpt lat="${latlng.lat}" lon="${latlng.lng}">\n    <name>Node ${index + 1}</name>\n  </wpt>\n`;
+            });
+            gpxContent += '</gpx>';
+            const url = URL.createObjectURL(new Blob([gpxContent], { type: 'application/gpx+xml' }));
+            const a = document.createElement('a'); a.href = url; a.download = fileName + '.gpx';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        }
+
+        function toggleS2Grid() {
+            showS2 = !showS2; const btn = document.getElementById('s2ToggleBtn');
+            if (showS2) { btn.classList.add('active'); btn.innerText = "🌐 網格：S2 Cell (Lv.17) [開啟中]"; drawS2Grid(); } 
+            else { btn.classList.remove('active'); btn.innerText = "🌐 網格：S2 Cell (Lv.17) [關閉中]"; s2Layer.clearLayers(); }
+        }
+
+        map.on('moveend', () => { if (showS2) drawS2Grid(); });
+
+        function drawS2Grid() {
+            s2Layer.clearLayers(); if (map.getZoom() < 15) return; 
+            const bounds = map.getBounds();
+            const stepLat = (bounds.getNorth() - bounds.getSouth()) / 20, stepLng = (bounds.getEast() - bounds.getWest()) / 20;
+            const drawnCells = new Set();
+            if (typeof S2 === 'undefined') return;
+            for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += stepLat) {
+                for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += stepLng) {
+                    try {
+                        const key = S2.latLngToKey(lat, lng, 17);
+                        if (!drawnCells.has(key)) {
+                            drawnCells.add(key);
+                            const corners = S2.S2Cell.FromHilbertQuadKey(key).getCornerLatLngs();
+                            L.polygon(corners.map(c => [c.lat, c.lng]), { color: '#64748B', weight: 1.5, fillOpacity: 0.02, dashArray: '5, 5' }).addTo(s2Layer);
+                        }
+                    } catch (e) { }
+                }
+            }
+        }
+
+        function clearMapWithConfirm() {
+            if(!confirm("確定要清除所有基準點與路線嗎？")) return;
+            saveHistoryState(); inputPoints = []; document.getElementById('coordsInput').value = '';
+            inputLayerGroup.clearLayers(); pathLine.setLatLngs([]); pathLine.pm.disable(); updateDistanceDisplay(); 
+        }
+    </script>
+</body>
+</html>
