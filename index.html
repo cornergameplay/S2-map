@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>S2網格掃盆路徑工具</title>
+    <title>S2網格掃盆編輯工具</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
@@ -26,8 +26,11 @@
         }
 
         * { box-sizing: border-box; }
+        
+        /* 徹底解決手機瀏覽器網址列高度 Bug 的核心設定 */
         html, body {
-            margin: 0; padding: 0; width: 100vw; height: 100vh; height: 100dvh; 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            position: fixed; /* 鎖定全螢幕，防止手機版高度誤判 */
             font-family: "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
             background-color: #000; overflow: hidden; display: flex; flex-direction: column;
         }
@@ -52,7 +55,11 @@
         }
         .btn-help:hover { background: var(--accent-color); color: var(--primary-color); }
 
-        .main-container { display: flex; flex: 1; position: relative; height: calc(100dvh - 55px); }
+        /* 主容器，自動填滿剩餘空間 */
+        .main-container { 
+            display: flex; flex: 1; position: relative; 
+            height: calc(100% - 55px); width: 100%; overflow: hidden; 
+        }
 
         /* 側邊欄 (毛玻璃) */
         #sidebar {
@@ -61,7 +68,8 @@
             backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
             border-right: 1px solid var(--glass-border);
             box-shadow: 5px 0 20px rgba(0,0,0,0.3); z-index: 1500; display: flex; flex-direction: column;
-            overflow-y: auto; overflow-x: hidden; padding: 15px 20px 150px 20px; 
+            overflow-y: auto; overflow-x: hidden; 
+            padding: 15px 20px 30px 20px; /* ★ 已縮減底部過大留白為 30px，俐落到底 ★ */
             color: #f1f5f9; -webkit-overflow-scrolling: touch; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: absolute; left: 0; top: 0; bottom: 0; transform: translateX(0);
         }
@@ -197,7 +205,7 @@
 
         /* ====== 登入遮罩 (毛玻璃) ====== */
         #loginOverlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             z-index: 9999; display: flex; justify-content: center; align-items: center;
             transition: opacity 0.5s ease, visibility 0.5s;
@@ -233,7 +241,7 @@
 
         /* 教學視窗 */
         .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7); z-index: 3000; display: none; justify-content: center; align-items: center;
             backdrop-filter: blur(5px);
         }
@@ -612,10 +620,9 @@
         }
 
         // ==========================================
-        // 路徑互動與圖層修復 (核心 Bug 修復區)
+        // 路徑互動與圖層修復
         // ==========================================
         function enablePathEditing() {
-            // 【修復】如果發現紅線被踢出畫布，立刻把它重新加回來！
             if (!map.hasLayer(pathLine)) {
                 pathLine.addTo(map);
             }
@@ -633,11 +640,10 @@
             enablePathEditing();
         });
 
-        // 捕捉右鍵刪除，完美同步清空
         pathLine.on('pm:remove', function(e) {
             saveHistoryState();
-            pathLine.setLatLngs([]); // 強制清空記憶體的點位
-            updateDistanceDisplay(); // 觸發清空文字框與距離歸零
+            pathLine.setLatLngs([]); 
+            updateDistanceDisplay(); 
         });
 
         pathLine.on('pm:markerdragstart', saveHistoryState);
@@ -649,7 +655,6 @@
         function updateDistanceDisplay() {
             let latlngs = pathLine.getLatLngs();
             
-            // 如果點位被刪光，距離歸零，文字框清空
             if (!latlngs || latlngs.length === 0) {
                 document.getElementById('distanceDisplay').innerText = `📏 路線總距離: 0.00 km`;
                 document.getElementById('routeCoordsOutput').value = "";
